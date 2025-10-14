@@ -1,0 +1,20 @@
+# data & artifacts
+data/*
+!data/.gitkeep
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.env
+.ipynb_checkpoints/
+dist/
+build/
+*.egg-info/
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
