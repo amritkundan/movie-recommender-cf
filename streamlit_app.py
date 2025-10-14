@@ -1,3 +1,9 @@
+try:
+    from surprise import SVD, Dataset, Reader
+    SURPRISE_AVAILABLE = True
+except ImportError:
+    SURPRISE_AVAILABLE = False
+    
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -5,6 +11,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 from surprise import SVD, Dataset, Reader
 
 from src.movie_recommender_cf.data import load_ratings, get_user_movie_matrix
+
+
 
 st.set_page_config(page_title="Movie Recommender (Collaborative Filtering)", page_icon="🎥")
 
@@ -59,6 +67,11 @@ if st.button("🎬 Get Recommendations"):
         st.stop()
 
     # --- QUICK MODE (COSINE) ---
+    if mode == "Trained Model (SVD)" and not SURPRISE_AVAILABLE:
+    st.warning("⚠️ SVD mode requires the Surprise library, which isn't supported on Streamlit Cloud. "
+               "Run this app locally to use the full trained model version.")
+    st.stop()
+
     if mode == "Quick (Cosine Similarity)":
         st.info("🔹 Using Quick Mode: User-based collaborative filtering with cosine similarity.")
         matrix = get_user_movie_matrix(df)
