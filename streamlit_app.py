@@ -126,10 +126,17 @@ if st.button("🎬 Get Recommendations"):
         top = recs.sort_values(ascending=False).head(10).reset_index()
         top.columns = ["movieId", "predicted_rating"]
 
-        # Merge movie titles
+        ## Merge movie titles and drop missing ones
         top = top.merge(movies, on="movieId", how="left")[["title", "predicted_rating"]]
-        st.success("🎯 Recommended Movies:")
-        st.table(top)
+        top = top.dropna(subset=["title"]).head(10)
+
+        if top.empty:
+            st.warning("⚠️ No matching movie titles found for recommendations. "
+               "You may need to use a larger movies.csv or one that matches your ratings.csv IDs.")
+        else:
+            st.success("🎯 Recommended Movies:")
+            st.table(top)
+
 
     # TRAINED MODEL (SVD)
     else:
