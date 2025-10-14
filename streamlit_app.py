@@ -1,20 +1,19 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Optional import for SVD mode
 try:
     from surprise import SVD, Dataset, Reader
     SURPRISE_AVAILABLE = True
 except ImportError:
     SURPRISE_AVAILABLE = False
 
-import streamlit as st
-import pandas as pd
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 from src.movie_recommender_cf.data import load_ratings, get_user_movie_matrix
 
 
-# ------------------------------
-# Streamlit Page Setup
-# ------------------------------
-st.set_page_config(page_title="Movie Recommender (Collaborative Filtering)", page_icon="🎥", layout="centered")
+st.set_page_config(page_title="Movie Recommender (Collaborative Filtering)", page_icon="🎥")
 
 st.title("🎥 Collaborative Filtering Movie Recommender")
 st.markdown("""
@@ -22,10 +21,7 @@ An interactive demo of **Collaborative Filtering** using user–movie ratings.
 You can explore two different recommendation modes below.
 """)
 
-
-# ------------------------------
-# Sidebar Configuration
-# ------------------------------
+# --- Sidebar: Mode Selection ---
 st.sidebar.title("⚙️ Settings")
 mode = st.sidebar.radio(
     "Choose Recommendation Mode:",
@@ -33,22 +29,7 @@ mode = st.sidebar.radio(
     help="Cosine Similarity = instant demo. SVD = trained matrix factorization model."
 )
 
-st.sidebar.markdown("""
-**Quick Mode (Cosine)**  
-- No training required  
-- Computes user–user similarity directly  
-- Great for small or demo datasets  
-
-**SVD Mode (Surprise)**  
-- Learns latent factors from ratings  
-- Provides more realistic predictions  
-- Slower, but powerful for real use cases
-""")
-
-
-# ------------------------------
-# Load Data
-# ------------------------------
+# --- Load dataset ---
 ratings_path = "data/ratings.csv"
 movies_path = "data/movies.csv"
 
@@ -59,53 +40,50 @@ except Exception as e:
     st.error(f"Error loading data: {e}")
     st.stop()
 
-# Ensure consistent columns
-if "movieId" not in df.columns or "movieId" not in movies.columns:
-    st.error("Missing 'movieId' column in ratings or movies data.")
-    st.stop()
+# Merge for movie titles
+df = df.merge(movies[["movieId", "title"]], on="movieId", how="left")
 
-
-# ------------------------------
-# Movie Rating Interface
-# ------------------------------
 st.markdown("### 🎞️ Rate a few movies to get started")
 
-# Keep the same sample list across reruns using session_state
-if "sample_movies" not in st.session_state or not isinstance(st.session_state.sample_movies, pd.DataFrame):
-    # only include movies that exist in both datasets
-    common_ids = df["movieId"].unique()
-    available_movies = movies[movies["movieId"].isin(common_ids)]
-    if len(available_movies) == 0:
-        st.error("No overlapping movie IDs between ratings.csv and movies.csv.")
-        st.stop()
-    st.session_state.sample_movies = available_movies.sample(10, random_state=42)
-
-# Ensure DataFrame format
-sample_df = pd.DataFrame(st.session_state.sample_movies)
+# --- Initialize / refresh movie sample ---
+if "sample_movies" not in st.session_state or st.button("🔄 Refresh movie list"):
+    movie_ids = df["movieId"].unique()
+    st.session_state.sample_movies = np.random.choice(movie_ids, 10, replace=False)
 
 user_ratings = {}
-for _, row in sample_df.iterrows():
-    title = str(row["title"])
-    mid = int(row["movieId"])
-    rating = st.slider(f"{title}", 0.0, 5.0, 0.0, 0.5, key=f"slider_{mid}")
-    if rating > 0:
-        user_ratings[mid] = rating
 
+# --- Rating sliders with individual refresh buttons ---
+cols = st.columns(2)
+for i, mid in enumerate(st.session_state.sample_movies):
+    title = movies.loc[movies["movieId"] == mid, "title"].values
+    title = title[0] if len(title) else f"Movie ID {mid}"
 
-# ------------------------------
-# Recommendation Logic
-# ------------------------------
+    with cols[i % 2]:
+        c1, c2 = st.columns([4, 1])
+        with c1:
+            rating = st.slider(title, 0.0, 5.0, 0.0, 0.5, key=f"rating_{mid}")
+        with c2:
+            if st.button("🔄", key=f"refresh_{mid}", help="Swap this movie for another random one"):
+                # Replace this specific movie with a new random one
+                available = [m for m in df["movieId"].unique() if m not in st.session_state.sample_movies]
+                if available:
+                    new_movie = np.random.choice(available)
+                    idx = list(st.session_state.sample_movies).index(mid)
+                    st.session_state.sample_movies[idx] = new_movie
+                    st.rerun()
+        if rating > 0:
+            user_ratings[mid] = rating
+
+# --- Get Recommendations ---
 if st.button("🎬 Get Recommendations"):
     if not user_ratings:
         st.warning("Please rate at least one movie to get personalized recommendations.")
         st.stop()
 
-    # QUICK MODE (COSINE)
+    # QUICK MODE
     if mode == "Quick (Cosine Similarity)":
         st.info("🔹 Using Quick Mode: User-based collaborative filtering with cosine similarity.")
-
         matrix = get_user_movie_matrix(df)
-        # Add new user (-1) row
         matrix.loc[-1] = 0
         for mid, r in user_ratings.items():
             if mid in matrix.columns:
@@ -123,30 +101,22 @@ if st.button("🎬 Get Recommendations"):
         recs = pd.Series(preds, index=matrix.columns)
         for mid in user_ratings.keys():
             recs.loc[mid] = -1
-        top = recs.sort_values(ascending=False).head(10).reset_index()
-        top.columns = ["movieId", "predicted_rating"]
+        top = recs.sort_values(ascending=False).head(10)
 
-        ## Merge movie titles and drop missing ones
-        top = top.merge(movies, on="movieId", how="left")[["title", "predicted_rating"]]
-        top = top.dropna(subset=["title"]).head(10)
+        results = pd.DataFrame({
+            "movieId": top.index,
+            "predicted_rating": top.values
+        }).merge(movies[["movieId", "title"]], on="movieId", how="left")
+        st.success("Here are your recommended movies:")
+        st.table(results[["title", "predicted_rating"]])
 
-        if top.empty:
-            st.warning("⚠️ No matching movie titles found for recommendations. "
-               "You may need to use a larger movies.csv or one that matches your ratings.csv IDs.")
-        else:
-            st.success("🎯 Recommended Movies:")
-            st.table(top)
-
-
-    # TRAINED MODEL (SVD)
+    # TRAINED MODEL MODE
     else:
         if not SURPRISE_AVAILABLE:
-            st.warning("⚠️ SVD mode requires the Surprise library, which isn't supported on Streamlit Cloud.\n"
-                       "Run this app locally to use the full trained model version.")
+            st.warning("⚠️ SVD mode requires the Surprise library, which isn't supported on Streamlit Cloud.")
             st.stop()
 
         st.info("🧠 Using Trained Model Mode (SVD via Surprise). This may take a moment...")
-
         reader = Reader(rating_scale=(0.5, 5))
         data = Dataset.load_from_df(df[["userId", "movieId", "rating"]], reader)
         trainset = data.build_full_trainset()
@@ -155,14 +125,13 @@ if st.button("🎬 Get Recommendations"):
 
         user_id = int(df["userId"].max()) + 1
         preds = []
-        for mid in movies["movieId"].unique():
+        for mid in df["movieId"].unique():
             if mid not in user_ratings:
                 pred = algo.predict(user_id, mid, r_ui=None)
                 preds.append((mid, pred.est))
         top_svd = sorted(preds, key=lambda x: x[1], reverse=True)[:10]
-        top_df = pd.DataFrame(top_svd, columns=["movieId", "predicted_rating"]).merge(
-            movies, on="movieId", how="left"
-        )[["title", "predicted_rating"]]
 
-        st.success("🎯 Recommended Movies:")
-        st.table(top_df)
+        results = pd.DataFrame(top_svd, columns=["movieId", "predicted_rating"]) \
+            .merge(movies[["movieId", "title"]], on="movieId", how="left")
+        st.success("Here are your top recommendations:")
+        st.table(results[["title", "predicted_rating"]])
