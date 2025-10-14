@@ -1,49 +1,51 @@
-from dataclasses import dataclass
-from typing import List, Tuple
 import numpy as np
 import pandas as pd
-from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from .features import build_corpus
+class CollaborativeFiltering:
+    def __init__(self, matrix: pd.DataFrame, mode: str = "user"):
+        """
+        mode: 'user' for user-based, 'item' for item-based CF
+        """
+        self.mode = mode
+        self.matrix = matrix
+        self.similarity = None
 
-@dataclass
-class ContentRecommender:
-    df: pd.DataFrame
-    vectorizer: CountVectorizer | None = None
-    count_matrix: np.ndarray | None = None
-    sim_matrix: np.ndarray | None = None
-    title_lower_to_idx: dict | None = None
-
-    def fit(self, ngram_range: tuple[int,int]=(1,2), min_df: int = 1) -> "ContentRecommender":
-        corpus = build_corpus(self.df)
-        self.vectorizer = CountVectorizer(ngram_range=ngram_range, min_df=min_df)
-        self.count_matrix = self.vectorizer.fit_transform(corpus)
-        self.sim_matrix = cosine_similarity(self.count_matrix)
-        # map lowercase titles for robust lookup
-        self.title_lower_to_idx = {t.lower(): i for i, t in enumerate(self.df["title"].tolist())}
+    def fit(self):
+        """Compute similarity matrix"""
+        if self.mode == "user":
+            self.similarity = cosine_similarity(self.matrix)
+        elif self.mode == "item":
+            self.similarity = cosine_similarity(self.matrix.T)
+        else:
+            raise ValueError("mode must be 'user' or 'item'")
         return self
 
-    def _idx_from_title(self, title: str) -> int:
-        if self.title_lower_to_idx is None:
-            raise RuntimeError("Model not fitted. Call fit() first.")
-        idx = self.title_lower_to_idx.get(title.lower())
-        if idx is None:
-            # Try partial match
-            candidates = [i for i, t in enumerate(self.df["title"].tolist()) if title.lower() in t.lower()]
-            if not candidates:
-                raise KeyError(f"Title not found (or close match): {title}")
-            idx = candidates[0]
-        return idx
+    def recommend_for_user(self, user_id: int, top_k: int = 5) -> pd.DataFrame:
+        """Recommend movies for a specific user."""
+        if self.similarity is None:
+            raise RuntimeError("Model not fitted. Call fit().")
 
-    def similar(self, title: str, k: int = 10, include_scores: bool = False) -> List[str] | List[Tuple[str, float]]:
-        if self.sim_matrix is None:
-            raise RuntimeError("Model not fitted. Call fit() first.")
-        idx = self._idx_from_title(title)
-        sims = list(enumerate(self.sim_matrix[idx]))
-        sims = sorted(sims, key=lambda x: x[1], reverse=True)
-        # exclude the item itself at position 0
-        top = sims[1:k+1]
-        if include_scores:
-            return [(self.df.iloc[i]["title"], float(score)) for i, score in top]
-        return [self.df.iloc[i]["title"] for i, _ in top]
+        if user_id not in self.matrix.index:
+            raise KeyError(f"User ID {user_id} not found.")
+
+        user_idx = list(self.matrix.index).index(user_id)
+
+        if self.mode == "user":
+            sim_scores = self.similarity[user_idx]
+            # weighted ratings
+            sim_scores = np.array(sim_scores)
+            weighted_sum = sim_scores @ self.matrix.values
+            norm = np.array([abs(sim_scores).sum()] * self.matrix.shape[1])
+            preds = weighted_sum / (norm + 1e-9)
+            user_ratings = pd.Series(preds, index=self.matrix.columns)
+        else:  # item-based
+            user_ratings = self.matrix.loc[user_id]
+            preds = self.similarity @ user_ratings.values
+            user_ratings = pd.Series(preds, index=self.matrix.columns)
+
+        # remove movies already rated
+        rated_movies = self.matrix.loc[user_id]
+        unrated = rated_movies[rated_movies == 0]
+        recs = user_ratings.loc[unrated.index].sort_values(ascending=False).head(top_k)
+        return recs.reset_index().rename(columns={"index": "movieId", 0: "predicted_rating"})
