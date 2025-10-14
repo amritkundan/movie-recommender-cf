@@ -1,19 +1,38 @@
-# 🎬 Movie Recommender (Content-Based)
+# 🎬 Movie Recommender System (Collaborative Filtering)
 
-A simple, fast content-based movie recommender using keywords, cast, genres, and director. Built from a Jupyter notebook and refactored into a clean, testable Python package with a CLI and optional Streamlit app.
+An interactive movie recommendation web app built with **Python** and **Streamlit**, using collaborative filtering on the **MovieLens** dataset.  
+Users can rate a few movies and instantly get personalized recommendations based on user similarity or a trained matrix-factorization model.
 
-## Features
-- Content-based similarity with `CountVectorizer` + cosine similarity
-- CLI to get recommendations from the terminal
-- Optional Streamlit UI for quick demos
-- Tests + packaging for easy maintenance
+🔗 **Live Demo:** [movie-recommender-cf.streamlit.app](https://movie-recommender-cf-js9vo4rx9vv6cmhmf5pacw.streamlit.app/#rate-a-few-movies-to-get-started)
 
-## Data
-Place your dataset at `data/movies.csv` with columns:
-`title, keywords, cast, genres, director`
+---
 
-## Quickstart
+## 🚀 Features
+
+- **Cold-Start Interface** – users rate a few movies (random or popular titles)  
+- **Dynamic Refresh** – swap individual movies or refresh the entire list  
+- **Two Recommendation Modes**  
+  - *Quick (Cosine Similarity)* – lightweight demo mode  
+  - *Trained Model (SVD)* – matrix factorization using the Surprise library  
+- **Interactive UI** built in Streamlit  
+- Based on the **MovieLens 100K** dataset
+
+---
+
+## 🧠 Tech Stack
+
+- **Python 3.10+**
+- **Streamlit**
+- **pandas**, **NumPy**
+- **scikit-learn**
+- **Surprise (SVD algorithm)**
+
+---
+
+## ⚙️ Setup & Run Locally
+
 ```bash
-python -m venv .venv && source .venv/bin/activate   # on Windows: .venv\Scripts\activate
+git clone https://github.com/amritkundan/movie-recommender-cf.git
+cd movie-recommender-cf
 pip install -r requirements.txt
-pip install -e .
+streamlit run streamlit_app.py
