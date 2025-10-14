@@ -66,12 +66,15 @@ if st.button("🎬 Get Recommendations"):
         st.warning("Please rate at least one movie to get personalized recommendations.")
         st.stop()
 
-    # --- QUICK MODE (COSINE) ---
+    # --- Handle Surprise availability ---
     if mode == "Trained Model (SVD)" and not SURPRISE_AVAILABLE:
-    st.warning("⚠️ SVD mode requires the Surprise library, which isn't supported on Streamlit Cloud. "
-               "Run this app locally to use the full trained model version.")
-    st.stop()
+        st.warning(
+            "⚠️ SVD mode requires the Surprise library, which isn't supported on Streamlit Cloud. "
+            "Run this app locally to use the full trained model version."
+        )
+        st.stop()
 
+    # --- QUICK MODE (COSINE) ---
     if mode == "Quick (Cosine Similarity)":
         st.info("🔹 Using Quick Mode: User-based collaborative filtering with cosine similarity.")
         matrix = get_user_movie_matrix(df)
@@ -97,7 +100,7 @@ if st.button("🎬 Get Recommendations"):
         st.table(top.reset_index().rename(columns={"index": "movieId", 0: "predicted_rating"}))
 
     # --- TRAINED MODEL (SVD) ---
-    else:
+    elif mode == "Trained Model (SVD)" and SURPRISE_AVAILABLE:
         st.info("🧠 Using Trained Model Mode (SVD via Surprise). This may take a moment...")
         reader = Reader(rating_scale=(0.5, 5))
         data = Dataset.load_from_df(df[["userId", "movieId", "rating"]], reader)
@@ -114,3 +117,4 @@ if st.button("🎬 Get Recommendations"):
         top_svd = sorted(preds, key=lambda x: x[1], reverse=True)[:10]
         st.success("Here are your top recommendations (by ID):")
         st.table(pd.DataFrame(top_svd, columns=["movieId", "predicted_rating"]))
+
