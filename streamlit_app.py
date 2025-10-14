@@ -21,12 +21,18 @@ An interactive demo of **Collaborative Filtering** using user–movie ratings.
 You can explore two different recommendation modes below.
 """)
 
-# --- Sidebar: Mode Selection ---
+# --- Sidebar: Settings ---
 st.sidebar.title("⚙️ Settings")
 mode = st.sidebar.radio(
     "Choose Recommendation Mode:",
     ["Quick (Cosine Similarity)", "Trained Model (SVD)"],
     help="Cosine Similarity = instant demo. SVD = trained matrix factorization model."
+)
+
+cold_start_mode = st.sidebar.radio(
+    "🎬 Choose how to pick initial movies:",
+    ["Random", "Popular"],
+    help="Show either random movies or the most popular ones first."
 )
 
 # --- Load dataset ---
@@ -40,19 +46,25 @@ except Exception as e:
     st.error(f"Error loading data: {e}")
     st.stop()
 
-# Merge for movie titles
+# Merge ratings with titles
 df = df.merge(movies[["movieId", "title"]], on="movieId", how="left")
+
+# Compute popularity (for Popular mode)
+movie_popularity = df.groupby("movieId")["rating"].count().sort_values(ascending=False)
+popular_movie_ids = movie_popularity.head(300).index.tolist()  # top 300 most rated
 
 st.markdown("### 🎞️ Rate a few movies to get started")
 
 # --- Initialize / refresh movie sample ---
 if "sample_movies" not in st.session_state or st.button("🔄 Refresh movie list"):
-    movie_ids = df["movieId"].unique()
-    st.session_state.sample_movies = np.random.choice(movie_ids, 10, replace=False)
+    if cold_start_mode == "Popular":
+        st.session_state.sample_movies = np.random.choice(popular_movie_ids, 10, replace=False)
+    else:
+        st.session_state.sample_movies = np.random.choice(df["movieId"].unique(), 10, replace=False)
 
 user_ratings = {}
 
-# --- Rating sliders with individual refresh buttons ---
+# --- Rating sliders with per-movie refresh buttons ---
 cols = st.columns(2)
 for i, mid in enumerate(st.session_state.sample_movies):
     title = movies.loc[movies["movieId"] == mid, "title"].values
@@ -64,8 +76,10 @@ for i, mid in enumerate(st.session_state.sample_movies):
             rating = st.slider(title, 0.0, 5.0, 0.0, 0.5, key=f"rating_{mid}")
         with c2:
             if st.button("🔄", key=f"refresh_{mid}", help="Swap this movie for another random one"):
-                # Replace this specific movie with a new random one
-                available = [m for m in df["movieId"].unique() if m not in st.session_state.sample_movies]
+                if cold_start_mode == "Popular":
+                    available = [m for m in popular_movie_ids if m not in st.session_state.sample_movies]
+                else:
+                    available = [m for m in df["movieId"].unique() if m not in st.session_state.sample_movies]
                 if available:
                     new_movie = np.random.choice(available)
                     idx = list(st.session_state.sample_movies).index(mid)
