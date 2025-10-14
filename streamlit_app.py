@@ -71,7 +71,7 @@ if "movieId" not in df.columns or "movieId" not in movies.columns:
 st.markdown("### 🎞️ Rate a few movies to get started")
 
 # Keep the same sample list across reruns using session_state
-if "sample_movies" not in st.session_state:
+if "sample_movies" not in st.session_state or not isinstance(st.session_state.sample_movies, pd.DataFrame):
     # only include movies that exist in both datasets
     common_ids = df["movieId"].unique()
     available_movies = movies[movies["movieId"].isin(common_ids)]
@@ -80,12 +80,14 @@ if "sample_movies" not in st.session_state:
         st.stop()
     st.session_state.sample_movies = available_movies.sample(10, random_state=42)
 
-user_ratings = {}
+# Ensure DataFrame format
+sample_df = pd.DataFrame(st.session_state.sample_movies)
 
-for _, row in st.session_state.sample_movies.iterrows():
-    title = row["title"]
+user_ratings = {}
+for _, row in sample_df.iterrows():
+    title = str(row["title"])
     mid = int(row["movieId"])
-    rating = st.slider(f"{title}", 0.0, 5.0, 0.0, 0.5)
+    rating = st.slider(f"{title}", 0.0, 5.0, 0.0, 0.5, key=f"slider_{mid}")
     if rating > 0:
         user_ratings[mid] = rating
 
