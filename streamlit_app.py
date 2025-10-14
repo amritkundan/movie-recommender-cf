@@ -8,7 +8,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-from surprise import SVD, Dataset, Reader
 
 from src.movie_recommender_cf.data import load_ratings, get_user_movie_matrix
 
