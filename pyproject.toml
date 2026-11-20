@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "movie-recommender"
 version = "0.1.0"
-description = "Content-based movie recommender (keywords+cast+genres+director)"
+description = "Interactive collaborative-filtering movie recommender"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Amrit Kundan" }]
@@ -16,6 +16,9 @@ dependencies = [
     "scikit-surprise>=1.1.5,<1.2",
     "streamlit>=1.32",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
