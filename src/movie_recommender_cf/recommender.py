@@ -110,16 +110,39 @@ def recommend_from_ratings(
         raise ValueError("At least one user rating is required.")
 
     matrix = get_user_movie_matrix(historical_ratings)
-    new_user_id = "__new_user__"
-    matrix.loc[new_user_id] = np.nan
+    visitor = pd.Series(np.nan, index=matrix.columns, dtype=float)
     for movie_id, rating in user_ratings.items():
         if movie_id in matrix.columns:
-            matrix.loc[new_user_id, movie_id] = float(rating)
+            visitor.loc[movie_id] = float(rating)
 
-    if matrix.loc[new_user_id].notna().sum() == 0:
+    if visitor.notna().sum() == 0:
         raise ValueError("None of the rated movies exist in the ratings dataset.")
 
-    return CollaborativeFiltering(matrix, mode="user").fit().recommend_for_user(
-        new_user_id,
-        top_k=top_k,
+    # Only the visitor-to-user similarities are needed here.  Avoid building a
+    # quadratic all-user similarity matrix for an interactive request.
+    visitor_values = visitor.to_numpy(dtype=float)
+    historical_values = matrix.to_numpy(dtype=float)
+    similarities = np.array(
+        [_cosine_on_observed(visitor_values, row) for row in historical_values]
+    )
+    observed = np.isfinite(historical_values)
+    weighted_sum = similarities @ np.nan_to_num(historical_values, nan=0.0)
+    normalizer = np.abs(similarities) @ observed
+    predictions = np.divide(
+        weighted_sum,
+        normalizer,
+        out=np.full(matrix.shape[1], np.nan),
+        where=normalizer > 0,
+    )
+    predicted_ratings = pd.Series(predictions, index=matrix.columns)
+    recommendations = (
+        predicted_ratings.loc[visitor.isna()]
+        .dropna()
+        .sort_values(ascending=False)
+        .head(top_k)
+    )
+    return (
+        recommendations.rename("predicted_rating")
+        .rename_axis("movieId")
+        .reset_index()
     )

@@ -111,6 +111,26 @@ def recommend_for_new_user_svd(
     model_params: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
     """Fit the visitor into an SVD model and rank their unseen movies."""
+    algorithm, new_user_id = fit_svd_for_new_user(
+        historical_ratings,
+        user_ratings,
+        model_params=model_params,
+    )
+    return recommend_with_fitted_model(
+        algorithm,
+        new_user_id,
+        historical_ratings["movieId"].unique(),
+        set(user_ratings),
+        top_k=top_k,
+    )
+
+
+def fit_svd_for_new_user(
+    historical_ratings: pd.DataFrame,
+    user_ratings: dict[int, float],
+    model_params: dict[str, Any] | None = None,
+):
+    """Fit SVD after adding the visitor's explicit ratings to the trainset."""
     if not user_ratings:
         raise ValueError("At least one user rating is required.")
 
@@ -130,11 +150,20 @@ def recommend_for_new_user_svd(
         model_type="SVD",
         params=model_params,
     )
+    return algorithm, new_user_id
 
-    rated_movie_ids = set(user_ratings)
+
+def recommend_with_fitted_model(
+    algorithm,
+    user_id: int,
+    candidate_movie_ids,
+    rated_movie_ids: set[int],
+    top_k: int = 10,
+) -> pd.DataFrame:
+    """Rank unseen candidate movies with an already-fitted Surprise model."""
     estimates = [
-        (movie_id, algorithm.predict(new_user_id, movie_id).est)
-        for movie_id in historical_ratings["movieId"].unique()
+        (movie_id, algorithm.predict(user_id, movie_id).est)
+        for movie_id in candidate_movie_ids
         if movie_id not in rated_movie_ids
     ]
     estimates.sort(key=lambda item: item[1], reverse=True)
